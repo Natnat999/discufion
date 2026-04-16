@@ -58,11 +58,23 @@
   line-height: 1.4;
 }
 
+button.secondary {
+  background: rgba(128, 128, 128, 0.1);
+  color: inherit;
+  border: 1px solid rgba(128, 128, 128, 0.2);
+}
+
+button.secondary:hover {
+  background: rgba(128, 128, 128, 0.2);
+}
+
 .message.received {
   align-self: flex-start;
   background: #e2e8f0;
   color: #1e293b;
   border-bottom-left-radius: 0.25rem;
+  display: flex;
+  flex-direction: column;
 }
 
 .message.sent {
@@ -70,6 +82,8 @@
   background: #3b82f6;
   color: white;
   border-bottom-right-radius: 0.25rem;
+  display: flex;
+  flex-direction: column;
 }
 
 .message-info {
