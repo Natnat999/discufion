@@ -26,6 +26,7 @@ function App() {
   const peerRef = useRef<Peer | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const connectionsRef = useRef<DataConnection[]>([]);
+  const messagesRef = useRef<Message[]>([]);
 
   useEffect(() => {
     if (isRegistered) {
@@ -38,6 +39,11 @@ function App() {
       });
 
       peer.on('connection', (conn) => {
+        // Empêcher les doublons de connexion
+        if (connectionsRef.current.find(c => c.peer === conn.peer)) {
+          conn.close();
+          return;
+        }
         handleIncomingConnection(conn);
       });
 
@@ -51,31 +57,39 @@ function App() {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Synchronise le ref avec l'état pour les callbacks Peer
   useEffect(() => {
     connectionsRef.current = connections;
   }, [connections]);
 
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
   const handleIncomingConnection = (conn: DataConnection) => {
     conn.on('open', () => {
+      // Double vérification à l'ouverture
+      if (connectionsRef.current.find(c => c.peer === conn.peer)) {
+        conn.close();
+        return;
+      }
       setConnections((prev) => [...prev, conn]);
       setStatus('online');
-      
-      // Si je suis l'hôte, j'annonce l'arrivée
-      if (isHost || connectionsRef.current.length === 0) {
-        setIsHost(true);
-      }
     });
 
     conn.on('data', (data: any) => {
       const msg = data as { text: string; sender: string; id: string; timestamp: number };
       
+      // Déduplication des messages par ID
+      if (messagesRef.current.find(m => m.id === msg.id)) {
+        return;
+      }
+
       setMessages((prev) => [
         ...prev,
         { ...msg, isMe: false },
       ]);
 
-      // Si je suis l'hôte, je relaie le message aux autres
+      // Relais seulement si je suis l'hôte
       if (isHost) {
         connectionsRef.current.forEach((c) => {
           if (c.peer !== conn.peer) {
@@ -88,6 +102,10 @@ function App() {
     conn.on('close', () => {
       setConnections((prev) => prev.filter((c) => c.peer !== conn.peer));
     });
+
+    conn.on('error', () => {
+      setConnections((prev) => prev.filter((c) => c.peer !== conn.peer));
+    });
   };
 
   const startSalon = () => {
@@ -97,6 +115,13 @@ function App() {
 
   const joinSalon = () => {
     if (!peerRef.current || !remotePeerId) return;
+    
+    // Ne pas se connecter à soi-même
+    if (remotePeerId === myPeerId) return;
+
+    // Ne pas se connecter si déjà connecté
+    if (connectionsRef.current.find(c => c.peer === remotePeerId)) return;
+
     const conn = peerRef.current.connect(remotePeerId);
     handleIncomingConnection(conn);
     setIsHost(false);
@@ -113,9 +138,10 @@ function App() {
       timestamp: Date.now(),
     };
 
-    // Envoyer à toutes les connexions actives
     connections.forEach((conn) => {
-      conn.send(msgData);
+      if (conn.open) {
+        conn.send(msgData);
+      }
     });
 
     setMessages((prev) => [...prev, { ...msgData, isMe: true }]);
@@ -193,18 +219,22 @@ function App() {
           <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>
             ID Salon : <span 
               onClick={() => {
-                navigator.clipboard.writeText(myPeerId);
-                alert('ID copié !');
+                const id = isHost ? myPeerId : (connections[0]?.peer || '');
+                if (id) {
+                  navigator.clipboard.writeText(id);
+                  alert('ID copié !');
+                }
               }}
               style={{ cursor: 'pointer', textDecoration: 'underline' }}
             >
-              {isHost ? myPeerId : (connections[0]?.peer || '...')}
+              {isHost ? myPeerId : (connections[0]?.peer || 'Chargement...')}
             </span>
+            {isHost && <span style={{ marginLeft: '0.5rem', color: '#3b82f6' }}>(Hôte)</span>}
           </div>
         </div>
         <div className="status">
           <Circle size={8} className={`status-dot online`} fill="currentColor" />
-          <span>{connections.length} participant(s)</span>
+          <span>{connections.length} participant(s) connecté(s)</span>
         </div>
       </header>
 
