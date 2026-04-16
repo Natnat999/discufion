@@ -1,43 +1,43 @@
 # Discufion
 
-A minimalist, modern P2P chat application for LAN networks. Truly serverless communication using WebRTC (via PeerJS).
+Une application de chat P2P minimaliste et moderne pour les réseaux LAN. Communication véritablement sans serveur utilisant WebRTC (via PeerJS).
 
-## Features
-- **Peer-to-Peer:** Direct browser-to-browser communication.
-- **Minimalist Design:** Clean, modern interface focusing on what matters.
-- **No Server:** No message storage or central authority.
+## Fonctionnalités
+- **Peer-to-Peer :** Communication directe de navigateur à navigateur.
+- **Design Minimaliste :** Interface épurée et moderne centrée sur l'essentiel.
+- **Sans Serveur :** Pas de stockage de messages ni d'autorité centrale.
 
-## Tech Stack
+## Technologies
 - React + TypeScript + Vite
 - PeerJS (WebRTC)
-- Lucide React (Icons)
-- Vanilla CSS
+- Lucide React (Icônes)
+- CSS Vanilla
 
-## Deployment (GitHub Pages)
+## Déploiement (GitHub Pages)
 
-To deploy this project to GitHub Pages:
+Pour déployer ce projet sur GitHub Pages :
 
-1. Ensure your repository name on GitHub matches the `base` path in `vite.config.ts` (default is `/discufion/`).
-2. Run the following command:
+1. Assurez-vous que le nom de votre dépôt sur GitHub correspond au chemin `base` dans `vite.config.ts` (par défaut `/discufion/`).
+2. Lancez la commande suivante :
    ```bash
    npm run deploy
    ```
 
-## Development
+## Développement
 
 ```bash
-# Install dependencies
+# Installer les dépendances
 npm install
 
-# Start development server
+# Lancer le serveur de développement
 npm run dev
 
-# Build for production
+# Construire pour la production
 npm run build
 ```
 
-## How to use
-1. Open the app.
-2. Share your Peer ID with a friend.
-3. Your friend enters your ID and clicks "Join Chat".
-4. Chat away!
+## Comment l'utiliser
+1. Ouvrez l'application.
+2. Partagez votre ID Peer avec un ami.
+3. Votre ami entre votre ID et clique sur "Rejoindre le salon".
+4. Discutez !

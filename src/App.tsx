@@ -22,7 +22,7 @@ function App() {
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Initialize Peer
+    // Initialisation de Peer
     const peer = new Peer();
     peerRef.current = peer;
 
@@ -100,7 +100,7 @@ function App() {
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(myPeerId);
-    alert('Peer ID copied!');
+    alert('ID copié dans le presse-papier !');
   };
 
   if (status === 'connecting' && !connection) {
@@ -111,22 +111,22 @@ function App() {
             <Users size={48} color="#3b82f6" />
           </div>
           <h1>Discufion</h1>
-          <p>Share your ID with a peer or join one via their ID.</p>
+          <p>Partagez votre ID avec un ami ou rejoignez-en un via son ID.</p>
           
-          <div className="peer-id-display" onClick={copyToClipboard} title="Click to copy">
-            {myPeerId || 'Generating...'} <Copy size={14} style={{ marginLeft: '0.5rem' }} />
+          <div className="peer-id-display" onClick={copyToClipboard} title="Cliquez pour copier">
+            {myPeerId || 'Génération...'} <Copy size={14} style={{ marginLeft: '0.5rem' }} />
           </div>
 
           <div className="join-form">
             <input
               type="text"
-              placeholder="Enter Peer ID to join..."
+              placeholder="Entrez l'ID du destinataire..."
               value={remotePeerId}
               onChange={(e) => setRemotePeerId(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && connectToPeer()}
             />
             <button onClick={connectToPeer} disabled={!remotePeerId}>
-              Join Chat
+              Rejoindre le salon
             </button>
           </div>
         </div>
@@ -140,7 +140,7 @@ function App() {
         <h1>Discufion</h1>
         <div className="status">
           <Circle size={8} className={`status-dot ${status === 'online' ? 'online' : ''}`} fill="currentColor" />
-          <span>{status === 'online' ? 'Connected' : 'Waiting for peer...'}</span>
+          <span>{status === 'online' ? 'Connecté' : 'En attente...'}</span>
         </div>
       </header>
 
@@ -159,7 +159,7 @@ function App() {
       <div className="input-area">
         <input
           type="text"
-          placeholder="Type a message..."
+          placeholder="Écrivez un message..."
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
