@@ -1,12 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
 import Peer from 'peerjs';
 import type { DataConnection } from 'peerjs';
-import { Send, Users, Circle, LogIn, PlusCircle } from 'lucide-react';
+import { Send, Users, Circle, LogIn, PlusCircle, Paperclip, FileIcon, Download } from 'lucide-react';
 import './App.css';
 
 interface Message {
   id: string;
-  text: string;
+  type: 'text' | 'file';
+  text?: string;
+  file?: {
+    data: any;
+    name: string;
+    type: string;
+    url?: string;
+  };
   sender: string;
   timestamp: number;
   isMe: boolean;
@@ -27,6 +34,7 @@ function App() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const connectionsRef = useRef<DataConnection[]>([]);
   const messagesRef = useRef<Message[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isRegistered) {
@@ -39,7 +47,6 @@ function App() {
       });
 
       peer.on('connection', (conn) => {
-        // Empêcher les doublons de connexion
         if (connectionsRef.current.find(c => c.peer === conn.peer)) {
           conn.close();
           return;
@@ -65,9 +72,32 @@ function App() {
     messagesRef.current = messages;
   }, [messages]);
 
+  const processIncomingData = (data: any, fromPeer: string) => {
+    const msg = data as Message;
+    
+    if (messagesRef.current.find(m => m.id === msg.id)) return;
+
+    // Si c'est un fichier, on crée une URL locale pour l'affichage
+    let processedMsg = { ...msg, isMe: false };
+    if (msg.type === 'file' && msg.file) {
+      const blob = new Blob([msg.file.data], { type: msg.file.type });
+      processedMsg.file = { ...msg.file, url: URL.createObjectURL(blob) };
+    }
+
+    setMessages((prev) => [...prev, processedMsg]);
+
+    // Relais par l'hôte
+    if (isHost) {
+      connectionsRef.current.forEach((c) => {
+        if (c.peer !== fromPeer) {
+          c.send(msg); // On renvoie le message original (avec les données brutes)
+        }
+      });
+    }
+  };
+
   const handleIncomingConnection = (conn: DataConnection) => {
     conn.on('open', () => {
-      // Double vérification à l'ouverture
       if (connectionsRef.current.find(c => c.peer === conn.peer)) {
         conn.close();
         return;
@@ -76,34 +106,9 @@ function App() {
       setStatus('online');
     });
 
-    conn.on('data', (data: any) => {
-      const msg = data as { text: string; sender: string; id: string; timestamp: number };
-      
-      // Déduplication des messages par ID
-      if (messagesRef.current.find(m => m.id === msg.id)) {
-        return;
-      }
-
-      setMessages((prev) => [
-        ...prev,
-        { ...msg, isMe: false },
-      ]);
-
-      // Relais seulement si je suis l'hôte
-      if (isHost) {
-        connectionsRef.current.forEach((c) => {
-          if (c.peer !== conn.peer) {
-            c.send(msg);
-          }
-        });
-      }
-    });
+    conn.on('data', (data) => processIncomingData(data, conn.peer));
 
     conn.on('close', () => {
-      setConnections((prev) => prev.filter((c) => c.peer !== conn.peer));
-    });
-
-    conn.on('error', () => {
       setConnections((prev) => prev.filter((c) => c.peer !== conn.peer));
     });
   };
@@ -114,12 +119,7 @@ function App() {
   };
 
   const joinSalon = () => {
-    if (!peerRef.current || !remotePeerId) return;
-    
-    // Ne pas se connecter à soi-même
-    if (remotePeerId === myPeerId) return;
-
-    // Ne pas se connecter si déjà connecté
+    if (!peerRef.current || !remotePeerId || remotePeerId === myPeerId) return;
     if (connectionsRef.current.find(c => c.peer === remotePeerId)) return;
 
     const conn = peerRef.current.connect(remotePeerId);
@@ -127,41 +127,93 @@ function App() {
     setIsHost(false);
   };
 
-  const sendMessage = () => {
+  const sendMessage = (type: 'text' | 'file', content?: any, fileInfo?: any) => {
     if (connections.length === 0 && !isHost) return;
-    if (!inputText.trim()) return;
 
-    const msgData = {
+    const msgData: Partial<Message> = {
       id: Math.random().toString(36).substr(2, 9),
-      text: inputText,
+      type,
       sender: username,
       timestamp: Date.now(),
     };
 
+    if (type === 'text') {
+      msgData.text = content;
+    } else {
+      msgData.file = fileInfo;
+    }
+
+    // Envoi
     connections.forEach((conn) => {
-      if (conn.open) {
-        conn.send(msgData);
-      }
+      if (conn.open) conn.send(msgData);
     });
 
-    setMessages((prev) => [...prev, { ...msgData, isMe: true }]);
-    setInputText('');
+    // Affichage local
+    const localMsg = { ...msgData, isMe: true } as Message;
+    if (type === 'file' && fileInfo.data) {
+      const blob = new Blob([fileInfo.data], { type: fileInfo.type });
+      localMsg.file = { ...fileInfo, url: URL.createObjectURL(blob) };
+    }
+
+    setMessages((prev) => [...prev, localMsg]);
+    if (type === 'text') setInputText('');
   };
 
-  const handleRegister = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (username.trim()) {
-      localStorage.setItem('username', username);
-      setIsRegistered(true);
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      sendMessage('file', null, {
+        data: reader.result,
+        name: file.name,
+        type: file.type
+      });
+    };
+    reader.readAsArrayBuffer(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const renderMessageContent = (msg: Message) => {
+    if (msg.type === 'text') return msg.text;
+
+    if (msg.file) {
+      const isImage = msg.file.type.startsWith('image/');
+      const isVideo = msg.file.type.startsWith('video/');
+
+      if (isImage && msg.file.url) {
+        return <img src={msg.file.url} alt={msg.file.name} className="media-preview" />;
+      }
+      if (isVideo && msg.file.url) {
+        return <video src={msg.file.url} controls className="media-preview" />;
+      }
+
+      return (
+        <div className="file-attachment">
+          <FileIcon size={20} />
+          <span className="file-name">{msg.file.name}</span>
+          <a href={msg.file.url} download={msg.file.name} className="download-btn">
+            <Download size={16} />
+          </a>
+        </div>
+      );
     }
+    return null;
   };
 
   if (!isRegistered) {
     return (
       <div className="setup-screen">
-        <form className="setup-card" onSubmit={handleRegister}>
-          <h1>Bienvenue sur Discufion</h1>
-          <p>Choisissez un pseudonyme pour commencer.</p>
+        <form className="setup-card" onSubmit={(e) => {
+          e.preventDefault();
+          if (username.trim()) {
+            localStorage.setItem('username', username);
+            setIsRegistered(true);
+          }
+        }}>
+          <h1>Discufion</h1>
+          <p>Entrez un pseudo pour commencer.</p>
           <div className="join-form">
             <input
               type="text"
@@ -170,7 +222,7 @@ function App() {
               onChange={(e) => setUsername(e.target.value)}
               autoFocus
             />
-            <button type="submit">Commencer</button>
+            <button type="submit">Entrer</button>
           </div>
         </form>
       </div>
@@ -181,29 +233,21 @@ function App() {
     return (
       <div className="setup-screen">
         <div className="setup-card">
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.5rem' }}>
-            <Users size={48} color="#3b82f6" />
-          </div>
-          <h1>Bonjour, {username}</h1>
-          <p>Créez un salon ou rejoignez-en un existant.</p>
-          
+          <Users size={48} color="#3b82f6" style={{ marginBottom: '1rem' }} />
+          <h1>Salut, {username}</h1>
           <div className="join-form">
             <button onClick={startSalon} className="secondary">
-              <PlusCircle size={18} style={{ marginRight: '0.5rem' }} />
-              Créer un nouveau salon
+              <PlusCircle size={18} style={{ marginRight: '0.5rem' }} /> Créer un salon
             </button>
-            
-            <div style={{ margin: '1rem 0', opacity: 0.5 }}>OU</div>
-
+            <div style={{ margin: '0.5rem', opacity: 0.5 }}>OU</div>
             <input
               type="text"
-              placeholder="ID du salon (ID de l'hôte)..."
+              placeholder="ID du salon..."
               value={remotePeerId}
               onChange={(e) => setRemotePeerId(e.target.value)}
             />
             <button onClick={joinSalon} disabled={!remotePeerId}>
-              <LogIn size={18} style={{ marginRight: '0.5rem' }} />
-              Rejoindre le salon
+              <LogIn size={18} style={{ marginRight: '0.5rem' }} /> Rejoindre
             </button>
           </div>
         </div>
@@ -216,33 +260,25 @@ function App() {
       <header className="header">
         <div>
           <h1>Discufion</h1>
-          <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>
-            ID Salon : <span 
-              onClick={() => {
-                const id = isHost ? myPeerId : (connections[0]?.peer || '');
-                if (id) {
-                  navigator.clipboard.writeText(id);
-                  alert('ID copié !');
-                }
-              }}
-              style={{ cursor: 'pointer', textDecoration: 'underline' }}
-            >
-              {isHost ? myPeerId : (connections[0]?.peer || 'Chargement...')}
-            </span>
-            {isHost && <span style={{ marginLeft: '0.5rem', color: '#3b82f6' }}>(Hôte)</span>}
+          <div className="salon-id" onClick={() => {
+            const id = isHost ? myPeerId : (connections[0]?.peer || '');
+            if (id) { navigator.clipboard.writeText(id); alert('ID copié !'); }
+          }}>
+            Salon : <span>{isHost ? myPeerId : (connections[0]?.peer || '...')}</span>
+            {isHost && <small> (Hôte)</small>}
           </div>
         </div>
         <div className="status">
-          <Circle size={8} className={`status-dot online`} fill="currentColor" />
-          <span>{connections.length} participant(s) connecté(s)</span>
+          <Circle size={8} className="status-dot online" fill="currentColor" />
+          <span>{connections.length + 1} en ligne</span>
         </div>
       </header>
 
       <div className="chat-area">
         {messages.map((msg) => (
           <div key={msg.id} className={`message ${msg.isMe ? 'sent' : 'received'}`}>
-            {!msg.isMe && <div style={{ fontWeight: 'bold', fontSize: '0.7rem', marginBottom: '0.2rem' }}>{msg.sender}</div>}
-            {msg.text}
+            {!msg.isMe && <div className="message-sender">{msg.sender}</div>}
+            {renderMessageContent(msg)}
             <div className="message-info">
               {new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </div>
@@ -253,13 +289,22 @@ function App() {
 
       <div className="input-area">
         <input
+          type="file"
+          hidden
+          ref={fileInputRef}
+          onChange={handleFileChange}
+        />
+        <button className="icon-btn" onClick={() => fileInputRef.current?.click()}>
+          <Paperclip size={20} />
+        </button>
+        <input
           type="text"
-          placeholder="Écrivez un message..."
+          placeholder="Message..."
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+          onKeyDown={(e) => e.key === 'Enter' && sendMessage('text', inputText)}
         />
-        <button onClick={sendMessage} disabled={!inputText.trim()}>
+        <button onClick={() => sendMessage('text', inputText)} disabled={!inputText.trim()}>
           <Send size={20} />
         </button>
       </div>
